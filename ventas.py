@@ -4,7 +4,6 @@ from db import (obtener_producto_por_sku, actualizar_stock,
                 obtener_cliente_por_cedula, guardar_venta, formatear_moneda)
 import os
 
-
 class VentasFrame(ttk.Frame):
 
     def __init__(self, parent, empleado=None):
@@ -208,14 +207,12 @@ class VentasFrame(ttk.Frame):
             if cant <= 0:
                 raise ValueError()
         except ValueError:
-            messagebox.showerror(
-                "Error", "Cantidad inválida. Debe ser un número mayor a 0")
+            messagebox.showerror("Error", "Cantidad inválida. Debe ser un número mayor a 0")
             self.entry_cant.focus()
             return
         prod = obtener_producto_por_sku(sku)
         if not prod:
-            messagebox.showerror("Error",
-                                 f"Producto con SKU '{sku}' no existe")
+            messagebox.showerror("Error", f"Producto con SKU '{sku}' no existe")
             self.entry_sku.focus()
             return
         if prod[6] < cant:
@@ -228,17 +225,13 @@ class VentasFrame(ttk.Frame):
             else:
                 return
         if cant == 0:
-            messagebox.showerror("Error",
-                                 "No hay stock disponible para este producto")
+            messagebox.showerror("Error", "No hay stock disponible para este producto")
             return
         for item in self.productos_venta:
             if item['sku'] == sku:
                 nueva_cantidad = item['cantidad'] + cant
                 if nueva_cantidad > prod[6]:
-                    messagebox.showerror(
-                        "Error",
-                        f"No hay suficiente stock. Máximo disponible: {prod[6]}"
-                    )
+                    messagebox.showerror("Error", f"No hay suficiente stock. Máximo disponible: {prod[6]}")
                     return
                 item['cantidad'] = nueva_cantidad
                 self.actualizar_tabla()
@@ -284,8 +277,7 @@ class VentasFrame(ttk.Frame):
     def eliminar_producto(self):
         seleccionado = self.tree.selection()
         if not seleccionado:
-            messagebox.showwarning("Selecciona un producto",
-                                   "Selecciona el producto a eliminar.")
+            messagebox.showwarning("Selecciona un producto", "Selecciona el producto a eliminar.")
             return
         item_values = self.tree.item(seleccionado[0])["values"]
         sku_seleccionado = str(item_values[0])
@@ -297,8 +289,7 @@ class VentasFrame(ttk.Frame):
 
     def vaciar_venta(self):
         if not self.productos_venta:
-            messagebox.showinfo("Información",
-                                "No hay productos en la venta actual.")
+            messagebox.showinfo("Información", "No hay productos en la venta actual.")
             return
         if messagebox.askyesno("Confirmar", "¿Vaciar toda la venta actual?"):
             self.productos_venta.clear()
@@ -325,8 +316,7 @@ class VentasFrame(ttk.Frame):
                 fg="green")
         else:
             self.cliente_actual = None
-            self.lbl_cliente_info.config(text="❌ Cliente no encontrado",
-                                         fg="red")
+            self.lbl_cliente_info.config(text="❌ Cliente no encontrado", fg="red")
 
     def _on_pago_change(self, event=None):
         metodo = self.combo_pago.get()
@@ -342,18 +332,15 @@ class VentasFrame(ttk.Frame):
 
     def _actualizar_cambio(self, event=None):
         try:
-            recibido_str = self.entry_recibido.get().replace("$", "").replace(
-                ".", "").replace(",", "")
+            recibido_str = self.entry_recibido.get().replace("$", "").replace(".", "").replace(",", "")
             recibido = float(recibido_str) if recibido_str else 0
         except:
             recibido = 0
         cambio = recibido - self.total
         if cambio < 0:
-            self.lbl_cambio.config(
-                text=f"FALTA: {formatear_moneda(abs(cambio))}", fg="red")
+            self.lbl_cambio.config(text=f"FALTA: {formatear_moneda(abs(cambio))}", fg="red")
         else:
-            self.lbl_cambio.config(text=f"Cambio: {formatear_moneda(cambio)}",
-                                   fg="green")
+            self.lbl_cambio.config(text=f"Cambio: {formatear_moneda(cambio)}", fg="green")
 
     def finalizar_venta(self):
         if not self.productos_venta:
@@ -363,15 +350,13 @@ class VentasFrame(ttk.Frame):
             messagebox.showerror("Error", "Selecciona un método de pago")
             return
         try:
-            recibido_str = self.entry_recibido.get().replace("$", "").replace(
-                ".", "").replace(",", "")
+            recibido_str = self.entry_recibido.get().replace("$", "").replace(".", "").replace(",", "")
             recibido = float(recibido_str)
         except:
             messagebox.showerror("Error", "Valor recibido inválido")
             return
         if recibido < self.total:
-            messagebox.showerror("Error",
-                                 "El valor recibido es menor al total")
+            messagebox.showerror("Error", "El valor recibido es menor al total")
             return
 
         try:
@@ -383,13 +368,21 @@ class VentasFrame(ttk.Frame):
             for x in self.productos_venta:
                 actualizar_stock(x['sku'], x['cantidad'])
             cliente_cedula = self.entry_cliente.get().strip() or None
-            id_factura = guardar_venta(productos_str, self.total,
-                                       self.combo_pago.get(), recibido, cambio,
-                                       self.empleado, cliente_cedula)
+
+            # ORDEN DE LOS ARGUMENTOS EN guardar_venta:
+            # productos_str, total, metodo_pago, valor_pagado, cambio, empleado, cliente_cedula
+            id_factura = guardar_venta(
+                productos_str,
+                self.total,
+                self.combo_pago.get(),
+                recibido,
+                cambio,
+                self.empleado,
+                cliente_cedula
+            )
+
             self._generar_factura(id_factura, recibido, cambio)
-            messagebox.showinfo(
-                "Venta Exitosa",
-                f"Venta guardada correctamente\nFactura: {id_factura}")
+            messagebox.showinfo("Venta Exitosa", f"Venta guardada correctamente\nFactura: {id_factura}")
             self.vaciar_venta()
         except Exception as e:
             messagebox.showerror("Error", f"Error al guardar la venta: {e}")
@@ -400,24 +393,22 @@ class VentasFrame(ttk.Frame):
         archivo = os.path.join(carpeta, f"{id_factura}.txt")
         with open(archivo, "w", encoding="utf-8") as f:
             f.write("=" * 54 + "\n")
-            f.write("420 SMOKING VIBES - FACTURA DE VENTA\n")
+            f.write("420 Smoking Vibes\n")
+            f.write("Cel: 3126251302\n")
+            f.write("Calle 1 #29 - 438\n")
             f.write("=" * 54 + "\n")
             f.write(f"ID FACTURA: {id_factura}\n")
             f.write(f"EMPLEADO: {self.empleado}\n")
             if self.cliente_actual:
-                f.write(
-                    f"CLIENTE: {self.cliente_actual[1]} | CÉDULA: {self.cliente_actual[2]}\n"
-                )
+                f.write(f"CLIENTE: {self.cliente_actual[1]} | CÉDULA: {self.cliente_actual[2]}\n")
             f.write("-" * 54 + "\n")
             for item in self.productos_venta:
-                f.write(
-                    f"{item['sku']} - {item['nombre']} x{item['cantidad']} = {formatear_moneda(item['cantidad'] * item['precio'])}\n"
-                )
+                f.write(f"{item['sku']} - {item['nombre']} x{item['cantidad']} = {formatear_moneda(item['cantidad'] * item['precio'])}\n")
             f.write("-" * 54 + "\n")
             f.write(f"TOTAL: {formatear_moneda(self.total)}\n")
             f.write(f"RECIBIDO: {formatear_moneda(recibido)}\n")
             f.write(f"CAMBIO: {formatear_moneda(cambio)}\n")
             f.write(f"MÉTODO DE PAGO: {self.combo_pago.get()}\n")
             f.write("=" * 54 + "\n")
-            f.write("¡GRACIAS POR TU COMPRA!\n")
+            f.write("¡GRACIAS POR TU COMPRA Y POR APOYAR EL PODER DE LA BUENA VIBRA! 😎✨\n")
             f.write("=" * 54 + "\n")

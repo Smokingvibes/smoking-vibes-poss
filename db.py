@@ -5,24 +5,19 @@ import shutil
 
 DB_PATH = "pos_420_smoking_vibes.db"
 
-
 # ======================== CONEXIÓN ========================
 def conectar():
     return sqlite3.connect(DB_PATH)
-
 
 # ======================== FECHAS Y MONEDA ========================
 def formatear_fecha():
     return datetime.now().strftime("%d/%m/%Y")
 
-
 def formatear_hora():
     return datetime.now().strftime("%H:%M:%S")
 
-
 def formatear_fecha_hora():
     return datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-
 
 def formatear_moneda(valor):
     try:
@@ -30,7 +25,6 @@ def formatear_moneda(valor):
     except Exception:
         valor = 0
     return f"${valor:,.0f}".replace(",", ".")
-
 
 # ======================== PRODUCTOS / INVENTARIO ========================
 def obtener_productos():
@@ -41,7 +35,6 @@ def obtener_productos():
     conn.close()
     return productos
 
-
 def obtener_producto_por_sku(sku):
     conn = conectar()
     cursor = conn.cursor()
@@ -50,7 +43,6 @@ def obtener_producto_por_sku(sku):
     conn.close()
     return producto
 
-
 def agregar_producto(sku, nombre, precio, stock, stock_min=5):
     conn = conectar()
     cursor = conn.cursor()
@@ -58,15 +50,14 @@ def agregar_producto(sku, nombre, precio, stock, stock_min=5):
     if cursor.fetchone():
         conn.close()
         raise Exception(f"El producto con SKU {sku} ya existe")
-
     cursor.execute(
         """
         INSERT INTO productos (sku, nombre, precio, stock, fecha_actualizacion, salidas_ventas, stock_actual, stock_minimo)
         VALUES (?, ?, ?, ?, ?, 0, ?, ?)
-    """, (sku, nombre, precio, stock, formatear_fecha(), stock, stock_min))
+        """, (sku, nombre, precio, stock, formatear_fecha(), stock, stock_min)
+    )
     conn.commit()
     conn.close()
-
 
 def editar_producto(sku_original, sku, nombre, precio, stock, stock_min=5):
     conn = conectar()
@@ -76,17 +67,15 @@ def editar_producto(sku_original, sku, nombre, precio, stock, stock_min=5):
         if cursor.fetchone():
             conn.close()
             raise Exception(f"El SKU {sku} ya está en uso")
-
     cursor.execute(
         """
         UPDATE productos
         SET sku=?, nombre=?, precio=?, stock=?, stock_actual=?, stock_minimo=?, fecha_actualizacion=?
         WHERE sku=?
-    """, (sku, nombre, precio, stock, stock, stock_min, formatear_fecha(),
-          sku_original))
+        """, (sku, nombre, precio, stock, stock, stock_min, formatear_fecha(), sku_original)
+    )
     conn.commit()
     conn.close()
-
 
 def eliminar_producto(sku):
     conn = conectar()
@@ -94,7 +83,6 @@ def eliminar_producto(sku):
     cursor.execute("DELETE FROM productos WHERE sku=?", (sku, ))
     conn.commit()
     conn.close()
-
 
 def actualizar_stock(sku, cantidad_vendida):
     conn = conectar()
@@ -105,10 +93,10 @@ def actualizar_stock(sku, cantidad_vendida):
         nuevo_stock = res[0] - cantidad_vendida
         cursor.execute(
             "UPDATE productos SET stock_actual=?, fecha_actualizacion=? WHERE sku=?",
-            (nuevo_stock, formatear_fecha(), sku))
+            (nuevo_stock, formatear_fecha(), sku)
+        )
         conn.commit()
     conn.close()
-
 
 def obtener_productos_stock_bajo():
     conn = conectar()
@@ -122,7 +110,6 @@ def obtener_productos_stock_bajo():
     conn.close()
     return productos
 
-
 # ======================== CLIENTES ========================
 def obtener_clientes():
     conn = conectar()
@@ -132,7 +119,6 @@ def obtener_clientes():
     conn.close()
     return clientes
 
-
 def obtener_cliente_por_cedula(cedula):
     conn = conectar()
     cursor = conn.cursor()
@@ -141,7 +127,6 @@ def obtener_cliente_por_cedula(cedula):
     conn.close()
     return cliente
 
-
 def agregar_cliente(nombre, cedula, celular, correo):
     conn = conectar()
     cursor = conn.cursor()
@@ -149,35 +134,32 @@ def agregar_cliente(nombre, cedula, celular, correo):
     if cursor.fetchone():
         conn.close()
         raise Exception(f"Ya existe un cliente con cédula {cedula}")
-
     cursor.execute(
         """
         INSERT INTO clientes (nombre, cedula, celular, correo, fecha_registro)
         VALUES (?, ?, ?, ?, ?)
-    """, (nombre, cedula, celular, correo, formatear_fecha()))
+        """, (nombre, cedula, celular, correo, formatear_fecha())
+    )
     conn.commit()
     conn.close()
-
 
 def editar_cliente(cedula_original, nombre, cedula, celular, correo):
     conn = conectar()
     cursor = conn.cursor()
     if cedula != cedula_original:
-        cursor.execute("SELECT cedula FROM clientes WHERE cedula=?",
-                       (cedula, ))
+        cursor.execute("SELECT cedula FROM clientes WHERE cedula=?", (cedula, ))
         if cursor.fetchone():
             conn.close()
             raise Exception(f"La cédula {cedula} ya está registrada")
-
     cursor.execute(
         """
         UPDATE clientes
         SET nombre=?, cedula=?, celular=?, correo=?
         WHERE cedula=?
-    """, (nombre, cedula, celular, correo, cedula_original))
+        """, (nombre, cedula, celular, correo, cedula_original)
+    )
     conn.commit()
     conn.close()
-
 
 def eliminar_cliente(cedula):
     conn = conectar()
@@ -186,13 +168,11 @@ def eliminar_cliente(cedula):
     conn.commit()
     conn.close()
 
-
 # ======================== EMPLEADOS (Trabajadores) ========================
 def agregar_empleado(usuario, nombre, cedula, contrasena):
     conn = conectar()
     cursor = conn.cursor()
-    cursor.execute("SELECT usuario FROM empleados WHERE usuario=?",
-                   (usuario, ))
+    cursor.execute("SELECT usuario FROM empleados WHERE usuario=?", (usuario, ))
     if cursor.fetchone():
         conn.close()
         raise Exception(f"El usuario {usuario} ya existe")
@@ -204,10 +184,10 @@ def agregar_empleado(usuario, nombre, cedula, contrasena):
         """
         INSERT INTO empleados (usuario, nombre, cedula, contrasena, fecha_ingreso)
         VALUES (?, ?, ?, ?, ?)
-    """, (usuario, nombre, cedula, contrasena, formatear_fecha()))
+        """, (usuario, nombre, cedula, contrasena, formatear_fecha())
+    )
     conn.commit()
     conn.close()
-
 
 def obtener_empleado_por_usuario(usuario):
     conn = conectar()
@@ -217,25 +197,24 @@ def obtener_empleado_por_usuario(usuario):
     conn.close()
     return empleado
 
-
 def validar_empleado(usuario, contrasena):
     conn = conectar()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM empleados WHERE usuario=? AND contrasena=?",
-                   (usuario, contrasena))
+    cursor.execute("SELECT * FROM empleados WHERE usuario=? AND contrasena=?", (usuario, contrasena))
     empleado = cursor.fetchone()
     conn.close()
     return empleado
 
-
 # ======================== VENTAS ========================
-def guardar_venta(productos_str,
-                  total,
-                  metodo_pago,
-                  valor_pagado,
-                  cambio,
-                  empleado,
-                  cliente_cedula=None):
+def guardar_venta(
+    productos_str,
+    total,
+    cambio,
+    metodo_pago,
+    valor_pagado,
+    empleado,
+    cliente_cedula=None
+):
     conn = conectar()
     cursor = conn.cursor()
     id_factura = f"F{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -243,15 +222,25 @@ def guardar_venta(productos_str,
         """
         INSERT INTO ventas (
             id_factura, fecha, hora, empleado, productos, total, 
-            metodo_pago, valor_pagado, cambio, cliente_cedula, estado
+            cambio, metodo_pago, valor_pagado, cliente_cedula, estado
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completada')
-    """, (id_factura, formatear_fecha(), formatear_hora(), empleado,
-          productos_str, total, metodo_pago, valor_pagado, cambio,
-          cliente_cedula))
+        """,
+        (
+            id_factura,            # id_factura
+            formatear_fecha(),     # fecha
+            formatear_hora(),      # hora
+            empleado,              # empleado
+            productos_str,         # productos
+            total,                 # total
+            cambio,                # cambio
+            metodo_pago,           # metodo_pago
+            valor_pagado,          # valor_pagado
+            cliente_cedula         # cliente_cedula
+        )
+    )
     conn.commit()
     conn.close()
     return id_factura
-
 
 def obtener_ventas():
     conn = conectar()
@@ -261,7 +250,6 @@ def obtener_ventas():
     conn.close()
     return ventas
 
-
 def obtener_venta_por_id(id_factura):
     conn = conectar()
     cursor = conn.cursor()
@@ -270,16 +258,13 @@ def obtener_venta_por_id(id_factura):
     conn.close()
     return venta
 
-
 def obtener_ventas_por_fecha(fecha):
     conn = conectar()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM ventas WHERE fecha=? ORDER BY hora DESC",
-                   (fecha, ))
+    cursor.execute("SELECT * FROM ventas WHERE fecha=? ORDER BY hora DESC", (fecha, ))
     ventas = cursor.fetchall()
     conn.close()
     return ventas
-
 
 def obtener_ventas_por_empleado(empleado, fecha_inicio=None, fecha_fin=None):
     conn = conectar()
@@ -290,18 +275,19 @@ def obtener_ventas_por_empleado(empleado, fecha_inicio=None, fecha_fin=None):
             SELECT * FROM ventas 
             WHERE empleado=? AND fecha BETWEEN ? AND ?
             ORDER BY fecha DESC, hora DESC
-        """, (empleado, fecha_inicio, fecha_fin))
+            """, (empleado, fecha_inicio, fecha_fin)
+        )
     else:
         cursor.execute(
             """
             SELECT * FROM ventas 
             WHERE empleado=?
             ORDER BY fecha DESC, hora DESC
-        """, (empleado, ))
+            """, (empleado, )
+        )
     ventas = cursor.fetchall()
     conn.close()
     return ventas
-
 
 # ======================== BACKUP ========================
 def backup_database():
@@ -314,7 +300,6 @@ def backup_database():
         return backup_file
     except Exception as e:
         raise Exception(f"Error al crear backup: {e}")
-
 
 # ======================== INICIALIZAR BASE DE DATOS ========================
 def inicializar_bd():
@@ -344,7 +329,7 @@ def inicializar_bd():
             fecha_registro TEXT
         )
     """)
-    # Tabla ventas
+    # Tabla ventas (IMPORTANTE: Orden de columnas)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS ventas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -375,7 +360,6 @@ def inicializar_bd():
     """)
     conn.commit()
     conn.close()
-
 
 # Migración para agregar campo correo a clientes, hora a ventas, etc.
 def migrar_bd():
@@ -424,7 +408,6 @@ def migrar_bd():
         print("Tabla empleados creada.")
 
     conn.close()
-
 
 if __name__ == "__main__":
     inicializar_bd()

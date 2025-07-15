@@ -4,7 +4,8 @@ from db import (obtener_ventas, obtener_venta_por_id,
                 obtener_cliente_por_cedula, formatear_moneda, formatear_fecha,
                 formatear_hora)
 import os
-
+import platform
+import subprocess
 
 class FacturasFrame(ttk.Frame):
 
@@ -15,7 +16,6 @@ class FacturasFrame(ttk.Frame):
         self.cargar_facturas()
 
     def crear_interfaz(self):
-        # Header
         header = tk.Label(self,
                           text="GESTIÓN DE FACTURAS",
                           bg="#f0f8ff",
@@ -57,11 +57,11 @@ class FacturasFrame(ttk.Frame):
         self.tree.pack(padx=15, pady=8, fill="x")
         self.tree.bind("<Double-1>", self.ver_detalle)
 
-        # Configura colores por estado
+        # Colores según estado
         self.tree.tag_configure('completada', background='#ccffcc')
         self.tree.tag_configure('anulada', background='#ffcccc')
 
-        # Botones acción
+        # Botones
         frm_btns = tk.Frame(self)
         frm_btns.pack(pady=8)
         tk.Button(frm_btns,
@@ -91,27 +91,48 @@ class FacturasFrame(ttk.Frame):
         total = 0
         cantidad = 0
         for v in ventas:
-            estado = v[11] if len(v) > 11 and v[11] else "completada"
+            # ORDEN CORRECTO según la estructura REAL de la base de datos
+            id_factura      = v[1]
+            fecha           = v[2]
+            empleado        = v[3] if len(v) > 3 and v[3] else "-"
+            productos       = v[4] if len(v) > 4 else ""
+            total_venta     = v[5] if len(v) > 5 else 0
+            valor_pagado    = v[6] if len(v) > 6 else 0  # VALOR_PAGADO está en índice 6
+            cambio          = v[7] if len(v) > 7 else 0  # CAMBIO está en índice 7
+            metodo_pago     = v[8] if len(v) > 8 and v[8] else "-"  # METODO_PAGO está en índice 8
+            estado          = v[9] if len(v) > 9 and v[9] else "completada"
+            cliente_cedula  = v[10] if len(v) > 10 and v[10] else None
+            hora            = v[11] if len(v) > 11 and v[11] else "-"  # HORA está al final en índice 11
+            
             tag = (estado.lower() if estado else "completada")
             cliente_nombre = "-"
-            if len(v) > 10 and v[10]:
-                cliente = obtener_cliente_por_cedula(v[10])
+            if cliente_cedula:
+                cliente = obtener_cliente_por_cedula(cliente_cedula)
                 if cliente:
                     cliente_nombre = cliente[1][:15]
+            
             try:
-                total_val = float(v[6])
+                total_val = float(total_venta)
             except:
                 total_val = 0
+                
             if estado.lower() == "completada":
                 total += total_val
                 cantidad += 1
+                
+            # Insertar con el orden correcto: ID, Fecha, Hora, Empleado, Cliente, Total, Método, Estado
             self.tree.insert("",
                              "end",
-                             values=(v[1], v[2], v[3]
-                                     or "-", v[4], cliente_nombre,
-                                     formatear_moneda(total_val), v[8],
-                                     estado.capitalize()),
+                             values=(id_factura, 
+                                   fecha, 
+                                   hora,
+                                   empleado, 
+                                   cliente_nombre,
+                                   formatear_moneda(total_val), 
+                                   metodo_pago,
+                                   estado.capitalize()),
                              tags=(tag, ))
+                             
         self.lbl_resumen.config(
             text=
             f"Total facturas: {cantidad} | Total ventas: {formatear_moneda(total)}"
@@ -126,41 +147,68 @@ class FacturasFrame(ttk.Frame):
         resultados = []
         for v in ventas:
             incluir = False
+            
+            # ORDEN CORRECTO según la estructura REAL de la base de datos
+            id_factura      = v[1]
+            empleado        = v[3] if len(v) > 3 and v[3] else ""
+            cliente_cedula  = v[10] if len(v) > 10 and v[10] else None
+            
             if filtro == "Todos":
                 incluir = True
-            elif filtro == "ID Factura" and texto in str(v[1]).lower():
+            elif filtro == "ID Factura" and texto in str(id_factura).lower():
                 incluir = True
-            elif filtro == "Cliente" and len(v) > 10 and texto in (str(
-                    v[10]).lower()):
+            elif filtro == "Cliente" and cliente_cedula and texto in str(cliente_cedula).lower():
                 incluir = True
-            elif filtro == "Empleado" and texto in (v[4] or "").lower():
+            elif filtro == "Empleado" and texto in empleado.lower():
                 incluir = True
             if incluir:
                 resultados.append(v)
+                
         total = 0
         cantidad = 0
         for v in resultados:
-            estado = v[11] if len(v) > 11 and v[11] else "completada"
+            # ORDEN CORRECTO según la estructura REAL de la base de datos
+            id_factura      = v[1]
+            fecha           = v[2]
+            empleado        = v[3] if len(v) > 3 and v[3] else "-"
+            productos       = v[4] if len(v) > 4 else ""
+            total_venta     = v[5] if len(v) > 5 else 0
+            valor_pagado    = v[6] if len(v) > 6 else 0  # VALOR_PAGADO está en índice 6
+            cambio          = v[7] if len(v) > 7 else 0  # CAMBIO está en índice 7
+            metodo_pago     = v[8] if len(v) > 8 and v[8] else "-"  # METODO_PAGO está en índice 8
+            estado          = v[9] if len(v) > 9 and v[9] else "completada"
+            cliente_cedula  = v[10] if len(v) > 10 and v[10] else None
+            hora            = v[11] if len(v) > 11 and v[11] else "-"  # HORA está al final en índice 11
+            
             tag = (estado.lower() if estado else "completada")
             cliente_nombre = "-"
-            if len(v) > 10 and v[10]:
-                cliente = obtener_cliente_por_cedula(v[10])
+            if cliente_cedula:
+                cliente = obtener_cliente_por_cedula(cliente_cedula)
                 if cliente:
                     cliente_nombre = cliente[1][:15]
+                    
             try:
-                total_val = float(v[6])
+                total_val = float(total_venta)
             except:
                 total_val = 0
+                
             if estado.lower() == "completada":
                 total += total_val
                 cantidad += 1
+                
+            # Insertar con el orden correcto: ID, Fecha, Hora, Empleado, Cliente, Total, Método, Estado
             self.tree.insert("",
                              "end",
-                             values=(v[1], v[2], v[3]
-                                     or "-", v[4], cliente_nombre,
-                                     formatear_moneda(total_val), v[8],
-                                     estado.capitalize()),
+                             values=(id_factura, 
+                                   fecha, 
+                                   hora,
+                                   empleado, 
+                                   cliente_nombre,
+                                   formatear_moneda(total_val), 
+                                   metodo_pago,
+                                   estado.capitalize()),
                              tags=(tag, ))
+                             
         self.lbl_resumen.config(
             text=
             f"Total facturas: {cantidad} | Total ventas: {formatear_moneda(total)}"
@@ -174,51 +222,65 @@ class FacturasFrame(ttk.Frame):
         id_factura = self.tree.item(seleccion[0])["values"][0]
         v = obtener_venta_por_id(id_factura)
         if not v:
-            messagebox.showerror("No encontrada",
-                                 "No se encuentra esa factura.")
+            messagebox.showerror("No encontrada", "No se encuentra esa factura.")
             return
 
-        # Obtener info de cliente
+        # ORDEN CORRECTO según la estructura REAL de la base de datos
+        id_factura      = v[1]
+        fecha           = v[2]
+        empleado        = v[3]
+        productos       = v[4]
+        total           = v[5]
+        valor_pagado    = v[6]  # VALOR_PAGADO está en índice 6
+        cambio          = v[7]  # CAMBIO está en índice 7
+        metodo_pago     = v[8]  # METODO_PAGO está en índice 8
+        estado          = v[9] if len(v) > 9 else "completada"
+        cliente_cedula  = v[10]
+        hora            = v[11] if len(v) > 11 else "-"  # HORA está al final
+
         info_cliente = ""
-        if len(v) > 10 and v[10]:
-            cliente = obtener_cliente_por_cedula(v[10])
+        if cliente_cedula:
+            cliente = obtener_cliente_por_cedula(cliente_cedula)
             if cliente:
-                info_cliente = f"\nCLIENTE: {cliente[1]}\nCÉDULA: {cliente[2]}"
+                info_cliente = f"CLIENTE: {cliente[1]}\nCÉDULA: {cliente[2]}"
                 if cliente[3]:
                     info_cliente += f"\nCELULAR: {cliente[3]}"
 
         detalle = f"""
-{'='*60}
-                420 SMOKING VIBES
-                DETALLE DE FACTURA
-{'='*60}
+{'='*54}
+420 Smoking Vibes
+Cel: 3126251302
+Calle 1 #29 - 438
+{'='*54}
 
-ID FACTURA: {v[1]}
-FECHA: {v[2]}
-HORA: {v[3] or "No registrada"}
-EMPLEADO: {v[4]}
+ID FACTURA: {id_factura}
+FECHA: {fecha}
+HORA: {hora}
+EMPLEADO: {empleado}
+
 {info_cliente}
 
-{'-'*60}
+{'-'*54}
 PRODUCTOS VENDIDOS:
-{'-'*60}
-{v[5]}
+{'-'*54}
+{productos}
 
-{'-'*60}
-TOTAL: {formatear_moneda(v[6])}
-{'-'*60}
+{'-'*54}
+TOTAL: {formatear_moneda(total)}
+{'-'*54}
 
 PAGO:
-  • Método: {v[8]}
-  • Recibido: {formatear_moneda(v[9])}
-  • Cambio: {formatear_moneda(v[7])}
+  • Método: {metodo_pago}
+  • Recibido: {formatear_moneda(valor_pagado)}
+  • Cambio: {formatear_moneda(cambio)}
 
-ESTADO: {v[11].upper() if len(v) > 11 and v[11] else 'COMPLETADA'}
-{'='*60}
+{'='*54}
+¡Gracias por tu compra y Suave La Vida! 😎✨
+{'='*54}
 """
 
         ventana = tk.Toplevel(self)
-        ventana.title(f"Detalle Factura {v[1]}")
+        ventana.title(f"Detalle Factura {id_factura}")
         ventana.geometry("650x500")
         ventana.configure(bg="#f0f8ff")
 
@@ -231,11 +293,17 @@ ESTADO: {v[11].upper() if len(v) > 11 and v[11] else 'COMPLETADA'}
         btn_frame.pack(pady=6)
 
         def imprimir():
-            archivo = f"Facturas_Reimpresiones/Impresion_{id_factura}.txt"
-            os.makedirs("Facturas_Reimpresiones", exist_ok=True)
+            archivo = f"Factura_{id_factura}.txt"
             with open(archivo, "w", encoding="utf-8") as f:
                 f.write(detalle)
-            messagebox.showinfo("Impreso", f"Factura impresa en {archivo}")
+            try:
+                if platform.system() == "Windows":
+                    os.startfile(archivo, "print")
+                else:
+                    subprocess.run(["lp", archivo])
+                messagebox.showinfo("Impresión", f"Factura enviada a la impresora.\nArchivo: {archivo}")
+            except Exception as e:
+                messagebox.showerror("Error de impresión", f"No se pudo imprimir: {e}")
 
         tk.Button(btn_frame, text="Imprimir", command=imprimir,
                   bg="#90ee90").pack(side="left", padx=10)
@@ -259,39 +327,51 @@ ESTADO: {v[11].upper() if len(v) > 11 and v[11] else 'COMPLETADA'}
         os.makedirs(carpeta, exist_ok=True)
         archivo = os.path.join(carpeta, f"REIMPRESION_{id_factura}.txt")
 
+        # ORDEN CORRECTO según la estructura REAL de la base de datos
+        id_factura      = v[1]
+        fecha           = v[2]
+        empleado        = v[3]
+        productos       = v[4]
+        total           = v[5]
+        valor_pagado    = v[6]  # VALOR_PAGADO está en índice 6
+        cambio          = v[7]  # CAMBIO está en índice 7
+        metodo_pago     = v[8]  # METODO_PAGO está en índice 8
+        estado          = v[9] if len(v) > 9 else "completada"
+        cliente_cedula  = v[10]
+        hora            = v[11] if len(v) > 11 else "-"  # HORA está al final
+
         info_cliente = ""
-        if len(v) > 10 and v[10]:
-            cliente = obtener_cliente_por_cedula(v[10])
+        if cliente_cedula:
+            cliente = obtener_cliente_por_cedula(cliente_cedula)
             if cliente:
-                info_cliente = f"CLIENTE: {cliente[1]}\nCÉDULA: {cliente[2]}\n"
+                info_cliente = f"CLIENTE: {cliente[1]}\nCÉDULA: {cliente[2]}"
+                if cliente[3]:
+                    info_cliente += f"\nCELULAR: {cliente[3]}"
 
         with open(archivo, "w", encoding="utf-8") as f:
-            f.write("=" * 60 + "\n")
-            f.write("                420 SMOKING VIBES\n")
-            f.write("              REIMPRESIÓN DE FACTURA\n")
-            f.write("=" * 60 + "\n\n")
+            f.write("=" * 54 + "\n")
+            f.write("420 Smoking Vibes\n")
+            f.write("Cel: 3126251302\n")
+            f.write("Calle 1 #29 - 438\n")
+            f.write("=" * 54 + "\n\n")
             f.write(f"FACTURA N°: {id_factura}\n")
-            f.write(f"Fecha Original: {v[2]}   Hora: {v[3] or 'N/A'}\n")
-            f.write(
-                f"Fecha Reimpresión: {formatear_fecha()}   Hora: {formatear_hora()}\n"
-            )
-            f.write(f"Empleado: {v[4]}\n\n")
+            f.write(f"Fecha Original: {fecha}   Hora: {hora}\n")
+            f.write(f"Empleado: {empleado}\n\n")
             if info_cliente:
                 f.write(info_cliente + "\n")
-            f.write("-" * 60 + "\n")
-            f.write("PRODUCTOS:\n")
-            f.write("-" * 60 + "\n")
-            f.write(f"{v[5]}\n")
-            f.write("-" * 60 + "\n")
-            f.write(f"TOTAL: {formatear_moneda(v[6])}\n")
-            f.write("=" * 60 + "\n")
-            f.write(f"Método de Pago: {v[8]}\n")
-            f.write(f"Recibido: {formatear_moneda(v[9])}\n")
-            f.write(f"Cambio: {formatear_moneda(v[7])}\n")
-            f.write("=" * 60 + "\n")
-            f.write("         ¡GRACIAS POR SU COMPRA!\n")
-            f.write("            420 SMOKING VIBES\n")
-            f.write("=" * 60 + "\n")
+            f.write("-" * 54 + "\n")
+            f.write("PRODUCTOS VENDIDOS:\n")
+            f.write("-" * 54 + "\n")
+            f.write(f"{productos}\n")
+            f.write("-" * 54 + "\n")
+            f.write(f"TOTAL: {formatear_moneda(total)}\n")
+            f.write("=" * 54 + "\n")
+            f.write(f"Método de Pago: {metodo_pago}\n")
+            f.write(f"Recibido: {formatear_moneda(valor_pagado)}\n")
+            f.write(f"Cambio: {formatear_moneda(cambio)}\n")
+            f.write("=" * 54 + "\n")
+            f.write("¡Gracias por tu compra y por apoyar el poder de la buena vibra! 😎✨\n")
+            f.write("=" * 54 + "\n")
         messagebox.showinfo("Reimpresión", f"Factura reimpresa en:\n{archivo}")
 
     def reporte_dia(self):
@@ -301,14 +381,19 @@ ESTADO: {v[11].upper() if len(v) > 11 and v[11] else 'COMPLETADA'}
         total = 0
         detalles = ""
         for v in ventas_hoy:
+            # ORDEN CORRECTO según la estructura REAL de la base de datos
+            id_factura = v[1]
+            empleado = v[3] if len(v) > 3 else ""
+            total_venta = v[5] if len(v) > 5 else 0
+            
             try:
-                total_val = float(v[6])
+                total_val = float(total_venta)
             except:
                 total_val = 0
-            detalles += f"- Factura {v[1]}: {formatear_moneda(total_val)}  ({v[4]})\n"
+            detalles += f"- Factura {id_factura}: {formatear_moneda(total_val)}  ({empleado})\n"
             total += total_val
         reporte = f"""
-420 SMOKING VIBES
+420 Smoking Vibes
 REPORTE DEL DÍA: {fecha}
 
 Total ventas: {formatear_moneda(total)}
