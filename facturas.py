@@ -1,11 +1,17 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from db import (obtener_ventas, obtener_venta_por_id,
-                obtener_cliente_por_cedula, formatear_moneda, formatear_fecha,
-                formatear_hora)
+from db import (
+    obtener_ventas,
+    obtener_venta_por_id,
+    obtener_cliente_por_cedula,
+    formatear_moneda,
+    formatear_fecha
+)
 import os
 import platform
 import subprocess
+import pandas as pd
+from datetime import datetime
 
 class FacturasFrame(ttk.Frame):
 
@@ -43,8 +49,25 @@ class FacturasFrame(ttk.Frame):
                   text="Mostrar Todas",
                   command=self.cargar_facturas,
                   bg="#90ee90").pack(side="left", padx=6)
+        # Filtro de fechas para reportes
+        tk.Label(frm_filtros, text="Desde:").pack(side="left", padx=(18, 1))
+        self.entry_fecha_ini = tk.Entry(frm_filtros, width=11)
+        self.entry_fecha_ini.pack(side="left", padx=1)
+        self.entry_fecha_ini.insert(0, formatear_fecha())
+        tk.Label(frm_filtros, text="Hasta:").pack(side="left", padx=1)
+        self.entry_fecha_fin = tk.Entry(frm_filtros, width=11)
+        self.entry_fecha_fin.pack(side="left", padx=1)
+        self.entry_fecha_fin.insert(0, formatear_fecha())
+        tk.Button(frm_filtros,
+                  text="Reporte de Ventas",
+                  command=self.abrir_reporte_ventas,
+                  bg="#ffd700").pack(side="left", padx=6)
+        tk.Button(frm_filtros,
+                  text="Exportar Excel",
+                  command=self.exportar_excel_reporte,
+                  bg="#b4ffa8").pack(side="left", padx=3)
 
-        # Tabla
+        # Tabla de facturas
         cols = ("ID", "Fecha", "Hora", "Empleado", "Cliente", "Total",
                 "Método", "Estado")
         self.tree = ttk.Treeview(self,
@@ -57,11 +80,10 @@ class FacturasFrame(ttk.Frame):
         self.tree.pack(padx=15, pady=8, fill="x")
         self.tree.bind("<Double-1>", self.ver_detalle)
 
-        # Colores según estado
         self.tree.tag_configure('completada', background='#ccffcc')
         self.tree.tag_configure('anulada', background='#ffcccc')
 
-        # Botones
+        # Botones acción
         frm_btns = tk.Frame(self)
         frm_btns.pack(pady=8)
         tk.Button(frm_btns,
@@ -72,10 +94,6 @@ class FacturasFrame(ttk.Frame):
                   text="🖨️ Reimprimir",
                   command=self.reimprimir,
                   bg="#90ee90").pack(side="left", padx=7)
-        tk.Button(frm_btns,
-                  text="📊 Reporte del Día",
-                  command=self.reporte_dia,
-                  bg="#ffd700").pack(side="left", padx=7)
 
         # Resumen
         self.lbl_resumen = tk.Label(self,
@@ -84,59 +102,59 @@ class FacturasFrame(ttk.Frame):
                                     bg="#f0f8ff")
         self.lbl_resumen.pack(pady=3)
 
+        # DataFrame temporal para exportación de reportes
+        self.df_reporte = pd.DataFrame()
+
     def cargar_facturas(self):
         for item in self.tree.get_children():
             self.tree.delete(item)
         ventas = obtener_ventas()
         total = 0
         cantidad = 0
+        completadas = 0
+        anuladas = 0
+        efectivo = transferencia = datafono = 0
+        rows = []
         for v in ventas:
-            # ORDEN CORRECTO según la estructura REAL de la base de datos
-            id_factura      = v[1]
-            fecha           = v[2]
-            empleado        = v[3] if len(v) > 3 and v[3] else "-"
-            productos       = v[4] if len(v) > 4 else ""
-            total_venta     = v[5] if len(v) > 5 else 0
-            valor_pagado    = v[6] if len(v) > 6 else 0  # VALOR_PAGADO está en índice 6
-            cambio          = v[7] if len(v) > 7 else 0  # CAMBIO está en índice 7
-            metodo_pago     = v[8] if len(v) > 8 and v[8] else "-"  # METODO_PAGO está en índice 8
-            estado          = v[9] if len(v) > 9 and v[9] else "completada"
-            cliente_cedula  = v[10] if len(v) > 10 and v[10] else None
-            hora            = v[11] if len(v) > 11 and v[11] else "-"  # HORA está al final en índice 11
-            
-            tag = (estado.lower() if estado else "completada")
+            # Desempaquetar datos correctamente
+            id_factura = v[1]
+            fecha = v[2]
+            hora = v[11] if len(v) > 11 else "-"
+            empleado = v[3] if len(v) > 3 else "-"
+            cliente_cedula = v[10] if len(v) > 10 else None
             cliente_nombre = "-"
             if cliente_cedula:
                 cliente = obtener_cliente_por_cedula(cliente_cedula)
                 if cliente:
-                    cliente_nombre = cliente[1][:15]
-            
-            try:
-                total_val = float(total_venta)
-            except:
-                total_val = 0
-                
+                    cliente_nombre = cliente[1][:18]
+            total_venta = float(v[5]) if v[5] else 0
+            metodo = (v[8] or "").lower()
+            estado = v[9] if len(v) > 9 and v[9] else "completada"
+            tag = (estado.lower() if estado else "completada")
+            rows.append([id_factura, fecha, hora, empleado, cliente_nombre, total_venta, v[8], estado.capitalize()])
             if estado.lower() == "completada":
-                total += total_val
+                completadas += 1
+                total += total_venta
                 cantidad += 1
-                
-            # Insertar con el orden correcto: ID, Fecha, Hora, Empleado, Cliente, Total, Método, Estado
+                if "efectivo" in metodo:
+                    efectivo += total_venta
+                if "trans" in metodo:
+                    transferencia += total_venta
+                if "dat" in metodo:
+                    datafono += total_venta
+            elif "anul" in estado.lower() or "elimin" in estado.lower():
+                anuladas += 1
+        for row in rows:
             self.tree.insert("",
                              "end",
-                             values=(id_factura, 
-                                   fecha, 
-                                   hora,
-                                   empleado, 
-                                   cliente_nombre,
-                                   formatear_moneda(total_val), 
-                                   metodo_pago,
-                                   estado.capitalize()),
-                             tags=(tag, ))
-                             
+                             values=(row),
+                             tags=(row[7].lower(),))
         self.lbl_resumen.config(
-            text=
-            f"Total facturas: {cantidad} | Total ventas: {formatear_moneda(total)}"
+            text=f"Ventas completadas: {completadas} | Anuladas: {anuladas} | Total ventas: {formatear_moneda(total)}\n"
+                 f"Efectivo: {formatear_moneda(efectivo)} | Transferencia: {formatear_moneda(transferencia)} | Datáfono: {formatear_moneda(datafono)}"
         )
+        # Para exportar el último reporte mostrado en tabla
+        self.df_reporte = pd.DataFrame(rows, columns=["ID", "Fecha", "Hora", "Empleado", "Cliente", "Total", "Método", "Estado"])
 
     def filtrar_facturas(self):
         filtro = self.combo_filtro.get()
@@ -146,13 +164,9 @@ class FacturasFrame(ttk.Frame):
         ventas = obtener_ventas()
         resultados = []
         for v in ventas:
-            incluir = False
-            
-            # ORDEN CORRECTO según la estructura REAL de la base de datos
-            id_factura      = v[1]
-            empleado        = v[3] if len(v) > 3 and v[3] else ""
-            cliente_cedula  = v[10] if len(v) > 10 and v[10] else None
-            
+            id_factura = v[1]
+            empleado = v[3] if len(v) > 3 else ""
+            cliente_cedula = v[10] if len(v) > 10 else None
             if filtro == "Todos":
                 incluir = True
             elif filtro == "ID Factura" and texto in str(id_factura).lower():
@@ -161,58 +175,53 @@ class FacturasFrame(ttk.Frame):
                 incluir = True
             elif filtro == "Empleado" and texto in empleado.lower():
                 incluir = True
+            else:
+                incluir = False
             if incluir:
                 resultados.append(v)
-                
+        # El resto igual a cargar_facturas, pero solo con resultados
         total = 0
-        cantidad = 0
+        completadas = 0
+        anuladas = 0
+        efectivo = transferencia = datafono = 0
+        rows = []
         for v in resultados:
-            # ORDEN CORRECTO según la estructura REAL de la base de datos
-            id_factura      = v[1]
-            fecha           = v[2]
-            empleado        = v[3] if len(v) > 3 and v[3] else "-"
-            productos       = v[4] if len(v) > 4 else ""
-            total_venta     = v[5] if len(v) > 5 else 0
-            valor_pagado    = v[6] if len(v) > 6 else 0  # VALOR_PAGADO está en índice 6
-            cambio          = v[7] if len(v) > 7 else 0  # CAMBIO está en índice 7
-            metodo_pago     = v[8] if len(v) > 8 and v[8] else "-"  # METODO_PAGO está en índice 8
-            estado          = v[9] if len(v) > 9 and v[9] else "completada"
-            cliente_cedula  = v[10] if len(v) > 10 and v[10] else None
-            hora            = v[11] if len(v) > 11 and v[11] else "-"  # HORA está al final en índice 11
-            
-            tag = (estado.lower() if estado else "completada")
+            id_factura = v[1]
+            fecha = v[2]
+            hora = v[11] if len(v) > 11 else "-"
+            empleado = v[3] if len(v) > 3 else "-"
+            cliente_cedula = v[10] if len(v) > 10 else None
             cliente_nombre = "-"
             if cliente_cedula:
                 cliente = obtener_cliente_por_cedula(cliente_cedula)
                 if cliente:
-                    cliente_nombre = cliente[1][:15]
-                    
-            try:
-                total_val = float(total_venta)
-            except:
-                total_val = 0
-                
+                    cliente_nombre = cliente[1][:18]
+            total_venta = float(v[5]) if v[5] else 0
+            metodo = (v[8] or "").lower()
+            estado = v[9] if len(v) > 9 and v[9] else "completada"
+            tag = (estado.lower() if estado else "completada")
+            rows.append([id_factura, fecha, hora, empleado, cliente_nombre, total_venta, v[8], estado.capitalize()])
             if estado.lower() == "completada":
-                total += total_val
-                cantidad += 1
-                
-            # Insertar con el orden correcto: ID, Fecha, Hora, Empleado, Cliente, Total, Método, Estado
+                completadas += 1
+                total += total_venta
+                if "efectivo" in metodo:
+                    efectivo += total_venta
+                if "trans" in metodo:
+                    transferencia += total_venta
+                if "dat" in metodo:
+                    datafono += total_venta
+            elif "anul" in estado.lower() or "elimin" in estado.lower():
+                anuladas += 1
+        for row in rows:
             self.tree.insert("",
                              "end",
-                             values=(id_factura, 
-                                   fecha, 
-                                   hora,
-                                   empleado, 
-                                   cliente_nombre,
-                                   formatear_moneda(total_val), 
-                                   metodo_pago,
-                                   estado.capitalize()),
-                             tags=(tag, ))
-                             
+                             values=(row),
+                             tags=(row[7].lower(),))
         self.lbl_resumen.config(
-            text=
-            f"Total facturas: {cantidad} | Total ventas: {formatear_moneda(total)}"
+            text=f"Ventas completadas: {completadas} | Anuladas: {anuladas} | Total ventas: {formatear_moneda(total)}\n"
+                 f"Efectivo: {formatear_moneda(efectivo)} | Transferencia: {formatear_moneda(transferencia)} | Datáfono: {formatear_moneda(datafono)}"
         )
+        self.df_reporte = pd.DataFrame(rows, columns=["ID", "Fecha", "Hora", "Empleado", "Cliente", "Total", "Método", "Estado"])
 
     def ver_detalle(self, event=None):
         seleccion = self.tree.selection()
@@ -224,20 +233,18 @@ class FacturasFrame(ttk.Frame):
         if not v:
             messagebox.showerror("No encontrada", "No se encuentra esa factura.")
             return
-
-        # ORDEN CORRECTO según la estructura REAL de la base de datos
-        id_factura      = v[1]
-        fecha           = v[2]
-        empleado        = v[3]
-        productos       = v[4]
-        total           = v[5]
-        valor_pagado    = v[6]  # VALOR_PAGADO está en índice 6
-        cambio          = v[7]  # CAMBIO está en índice 7
-        metodo_pago     = v[8]  # METODO_PAGO está en índice 8
-        estado          = v[9] if len(v) > 9 else "completada"
-        cliente_cedula  = v[10]
-        hora            = v[11] if len(v) > 11 else "-"  # HORA está al final
-
+        # ORDEN CORRECTO
+        id_factura = v[1]
+        fecha = v[2]
+        empleado = v[3]
+        productos = v[4]
+        total = v[5]
+        valor_pagado = v[6]
+        cambio = v[7]
+        metodo_pago = v[8]
+        estado = v[9] if len(v) > 9 else "completada"
+        cliente_cedula = v[10]
+        hora = v[11] if len(v) > 11 else "-"
         info_cliente = ""
         if cliente_cedula:
             cliente = obtener_cliente_por_cedula(cliente_cedula)
@@ -245,7 +252,6 @@ class FacturasFrame(ttk.Frame):
                 info_cliente = f"CLIENTE: {cliente[1]}\nCÉDULA: {cliente[2]}"
                 if cliente[3]:
                     info_cliente += f"\nCELULAR: {cliente[3]}"
-
         detalle = f"""
 {'='*54}
 420 Smoking Vibes
@@ -278,17 +284,14 @@ PAGO:
 ¡Gracias por tu compra y Suave La Vida! 😎✨
 {'='*54}
 """
-
         ventana = tk.Toplevel(self)
         ventana.title(f"Detalle Factura {id_factura}")
         ventana.geometry("650x500")
         ventana.configure(bg="#f0f8ff")
-
         txt = tk.Text(ventana, width=80, height=26, font=("Consolas", 10))
         txt.pack(padx=10, pady=10)
         txt.insert("1.0", detalle)
         txt.config(state="disabled")
-
         btn_frame = tk.Frame(ventana)
         btn_frame.pack(pady=6)
 
@@ -326,20 +329,17 @@ PAGO:
         carpeta = "Facturas_Reimpresiones"
         os.makedirs(carpeta, exist_ok=True)
         archivo = os.path.join(carpeta, f"REIMPRESION_{id_factura}.txt")
-
-        # ORDEN CORRECTO según la estructura REAL de la base de datos
-        id_factura      = v[1]
-        fecha           = v[2]
-        empleado        = v[3]
-        productos       = v[4]
-        total           = v[5]
-        valor_pagado    = v[6]  # VALOR_PAGADO está en índice 6
-        cambio          = v[7]  # CAMBIO está en índice 7
-        metodo_pago     = v[8]  # METODO_PAGO está en índice 8
-        estado          = v[9] if len(v) > 9 else "completada"
-        cliente_cedula  = v[10]
-        hora            = v[11] if len(v) > 11 else "-"  # HORA está al final
-
+        id_factura = v[1]
+        fecha = v[2]
+        empleado = v[3]
+        productos = v[4]
+        total = v[5]
+        valor_pagado = v[6]
+        cambio = v[7]
+        metodo_pago = v[8]
+        estado = v[9] if len(v) > 9 else "completada"
+        cliente_cedula = v[10]
+        hora = v[11] if len(v) > 11 else "-"
         info_cliente = ""
         if cliente_cedula:
             cliente = obtener_cliente_por_cedula(cliente_cedula)
@@ -347,7 +347,6 @@ PAGO:
                 info_cliente = f"CLIENTE: {cliente[1]}\nCÉDULA: {cliente[2]}"
                 if cliente[3]:
                     info_cliente += f"\nCELULAR: {cliente[3]}"
-
         with open(archivo, "w", encoding="utf-8") as f:
             f.write("=" * 54 + "\n")
             f.write("420 Smoking Vibes\n")
@@ -374,56 +373,113 @@ PAGO:
             f.write("=" * 54 + "\n")
         messagebox.showinfo("Reimpresión", f"Factura reimpresa en:\n{archivo}")
 
-    def reporte_dia(self):
-        fecha = formatear_fecha()
-        ventas = obtener_ventas()
-        ventas_hoy = [v for v in ventas if v[2] == fecha]
-        total = 0
-        detalles = ""
-        for v in ventas_hoy:
-            # ORDEN CORRECTO según la estructura REAL de la base de datos
-            id_factura = v[1]
-            empleado = v[3] if len(v) > 3 else ""
-            total_venta = v[5] if len(v) > 5 else 0
-            
-            try:
-                total_val = float(total_venta)
-            except:
-                total_val = 0
-            detalles += f"- Factura {id_factura}: {formatear_moneda(total_val)}  ({empleado})\n"
-            total += total_val
-        reporte = f"""
-420 Smoking Vibes
-REPORTE DEL DÍA: {fecha}
-
-Total ventas: {formatear_moneda(total)}
-Cantidad de ventas: {len(ventas_hoy)}
-
-DETALLE:
-{detalles}
-"""
+    def abrir_reporte_ventas(self):
+        # Ventana de reporte de ventas con rango de fechas
         ventana = tk.Toplevel(self)
-        ventana.title("Reporte del Día")
-        ventana.geometry("480x350")
-        txt = tk.Text(ventana, width=58, height=16, font=("Consolas", 10))
-        txt.pack(padx=10, pady=10)
-        txt.insert("1.0", reporte)
-        txt.config(state="disabled")
+        ventana.title("Reporte de Ventas")
+        ventana.geometry("900x500")
+        ventana.configure(bg="#f0f8ff")
 
-        def guardar():
-            carpeta = "Reportes"
+        # Selector de fechas
+        frm = tk.Frame(ventana, bg="#f0f8ff")
+        frm.pack(pady=10)
+        tk.Label(frm, text="Desde:", bg="#f0f8ff").pack(side="left")
+        desde = tk.Entry(frm, width=12)
+        desde.pack(side="left", padx=3)
+        desde.insert(0, self.entry_fecha_ini.get())
+        tk.Label(frm, text="Hasta:", bg="#f0f8ff").pack(side="left")
+        hasta = tk.Entry(frm, width=12)
+        hasta.pack(side="left", padx=3)
+        hasta.insert(0, self.entry_fecha_fin.get())
+        tk.Button(frm, text="Buscar", bg="#ffd700", command=lambda: actualizar()).pack(side="left", padx=6)
+
+        # Tabla
+        cols = ("ID", "Fecha", "Hora", "Empleado", "Cliente", "Total", "Método", "Estado")
+        tree = ttk.Treeview(ventana, columns=cols, show="headings", height=16)
+        for col in cols:
+            tree.heading(col, text=col)
+            tree.column(col, width=110 if col != "Cliente" else 170)
+        tree.pack(padx=12, pady=5, fill="x")
+
+        resumen_lbl = tk.Label(ventana, text="", font=('Arial', 11, 'bold'), bg="#f0f8ff")
+        resumen_lbl.pack(pady=4)
+
+        def exportar_excel(df):
+            carpeta = "reportes de ventas"
             os.makedirs(carpeta, exist_ok=True)
-            archivo = os.path.join(carpeta,
-                                   f"Reporte_{fecha.replace('/', '_')}.txt")
-            with open(archivo, "w", encoding="utf-8") as f:
-                f.write(reporte)
-            messagebox.showinfo("Reporte", f"Reporte guardado en {archivo}")
+            desde_fecha = desde.get().replace("/", "-")
+            hasta_fecha = hasta.get().replace("/", "-")
+            nombre = f"Reporte_Ventas_{desde_fecha}_a_{hasta_fecha}.xlsx"
+            ruta = os.path.join(carpeta, nombre)
+            df.to_excel(ruta, index=False)
+            messagebox.showinfo("Exportar", f"Reporte exportado a:\n{ruta}")
 
-        tk.Button(ventana,
-                  text="Guardar Reporte",
-                  command=guardar,
-                  bg="#90ee90").pack(side="left", padx=12, pady=7)
-        tk.Button(ventana,
-                  text="Cerrar",
-                  command=ventana.destroy,
-                  bg="#ff7272").pack(side="right", padx=12, pady=7)
+        def actualizar():
+            tree.delete(*tree.get_children())
+            ventas = obtener_ventas()
+            fecha_ini = desde.get()
+            fecha_fin = hasta.get()
+            data = []
+            resumen = {
+                'completadas': 0, 'anuladas': 0, 'total': 0,
+                'efectivo': 0, 'transferencia': 0, 'datafono': 0
+            }
+            for v in ventas:
+                fecha = v[2]
+                try:
+                    f_dt = datetime.strptime(fecha, "%d/%m/%Y")
+                    d_dt = datetime.strptime(fecha_ini, "%d/%m/%Y")
+                    h_dt = datetime.strptime(fecha_fin, "%d/%m/%Y")
+                except:
+                    continue
+                if not (d_dt <= f_dt <= h_dt):
+                    continue
+                id_factura = v[1]
+                hora = v[11] if len(v) > 11 else "-"
+                empleado = v[3] if len(v) > 3 else "-"
+                cliente_nombre = "-"
+                if len(v) > 10 and v[10]:
+                    cliente = obtener_cliente_por_cedula(v[10])
+                    if cliente: cliente_nombre = cliente[1][:18]
+                total = float(v[5]) if v[5] else 0
+                metodo = (v[8] or "").lower()
+                estado = v[9] if len(v) > 9 and v[9] else "completada"
+                data.append([id_factura, fecha, hora, empleado, cliente_nombre, total, v[8], estado.capitalize()])
+                if estado.lower() == "completada":
+                    resumen['completadas'] += 1
+                    resumen['total'] += total
+                    if "efectivo" in metodo: resumen['efectivo'] += total
+                    if "trans" in metodo: resumen['transferencia'] += total
+                    if "dat" in metodo: resumen['datafono'] += total
+                elif "anul" in estado.lower() or "elimin" in estado.lower():
+                    resumen['anuladas'] += 1
+
+            for row in data:
+                tree.insert("", "end", values=(row))
+            resumen_lbl.config(
+                text=f"Ventas completadas: {resumen['completadas']} | Anuladas: {resumen['anuladas']} | "
+                     f"Total ventas: {formatear_moneda(resumen['total'])}\n"
+                     f"Efectivo: {formatear_moneda(resumen['efectivo'])} | "
+                     f"Transferencia: {formatear_moneda(resumen['transferencia'])} | "
+                     f"Datáfono: {formatear_moneda(resumen['datafono'])}"
+            )
+            ventana.df_reporte = pd.DataFrame(data, columns=cols)
+
+        tk.Button(ventana, text="Exportar Excel", command=lambda: exportar_excel(ventana.df_reporte),
+                  bg="#b4ffa8").pack(pady=7)
+
+        actualizar()  # Primera carga
+
+    def exportar_excel_reporte(self):
+        if self.df_reporte.empty:
+            messagebox.showwarning("Exportar", "Primero filtra o muestra las ventas que quieres exportar.")
+            return
+        carpeta = "reportes de ventas"
+        os.makedirs(carpeta, exist_ok=True)
+        fecha_ini = self.entry_fecha_ini.get().replace("/", "-")
+        fecha_fin = self.entry_fecha_fin.get().replace("/", "-")
+        nombre = f"Reporte_Ventas_{fecha_ini}_a_{fecha_fin}.xlsx"
+        ruta = os.path.join(carpeta, nombre)
+        self.df_reporte.to_excel(ruta, index=False)
+        messagebox.showinfo("Exportar", f"Reporte exportado a:\n{ruta}")
+

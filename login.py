@@ -1,10 +1,14 @@
 import tkinter as tk
-from tkinter import messagebox, simpledialog
-from db import formatear_fecha, formatear_hora, formatear_fecha, formatear_hora, conectar
+from tkinter import messagebox
+from db import (
+    formatear_fecha,
+    formatear_hora,
+    conectar,
+    registrar_inicio_sesion,
+    registrar_logout
+)
 import json
 import os
-import sqlite3
-
 
 class LoginWindow:
 
@@ -17,10 +21,8 @@ class LoginWindow:
 
         # Centrar ventana
         self.root.update_idletasks()
-        x = (self.root.winfo_screenwidth() // 2) - (self.root.winfo_width() //
-                                                    2)
-        y = (self.root.winfo_screenheight() //
-             2) - (self.root.winfo_height() // 2)
+        x = (self.root.winfo_screenwidth() // 2) - (self.root.winfo_width() // 2)
+        y = (self.root.winfo_screenheight() // 2) - (self.root.winfo_height() // 2)
         self.root.geometry(f"+{x}+{y}")
 
         self.usuario = None
@@ -201,7 +203,15 @@ class LoginWindow:
             self.cedula = db_cedula
 
             self.guardar_ultimo_usuario()
-            self.registrar_acceso()
+
+            # REGISTRAR EN BD EL INICIO DE SESIÓN
+            registrar_inicio_sesion(
+                self.usuario,
+                self.nombre,
+                self.cedula,
+                formatear_fecha(),
+                formatear_hora()
+            )
 
             messagebox.showinfo("Bienvenido",
                                 f"¡Hola {self.nombre}!\nAcceso concedido.")
@@ -310,20 +320,18 @@ class LoginWindow:
         ventana.transient(self.root)
         ventana.wait_window()
 
-    def registrar_acceso(self):
-        """Registra el acceso en un archivo de log"""
+    # ======== NUEVO: método para logout que puedes llamar desde main.py ========
+    def logout(self):
+        """
+        Registrar la salida del usuario actual, para cuadre de horas.
+        """
         try:
-            log_dir = "logs"
-            os.makedirs(log_dir, exist_ok=True)
-            log_file = os.path.join(
-                log_dir, f"accesos_{formatear_fecha().replace('/', '_')}.log")
-            with open(log_file, "a", encoding="utf-8") as f:
-                f.write(
-                    f"{formatear_fecha_hora()} - Usuario: {self.usuario} - Nombre: {self.nombre} - Cédula: {self.cedula}\n"
-                )
-        except:
-            pass  # Si falla el log, no interrumpir el login
-
+            from db import registrar_logout
+            fecha = formatear_fecha()
+            hora_salida = formatear_hora()
+            registrar_logout(self.usuario, fecha, hora_salida)
+        except Exception as e:
+            messagebox.showerror("Error al cerrar sesión", f"{e}")
 
 # Para testing
 if __name__ == "__main__":
